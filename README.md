@@ -2,6 +2,8 @@
 
 A small character-level language model that invents fantasy character names for the nine playable races in the D&D 5e Player's Handbook. It is built with Keras and TensorFlow and trained on about 1,900 names from D&D, Tolkien and other fantasy sources.
 
+**[Try it online](https://dnd-name-generator.streamlit.app)**: pick a race and a temperature, and generate names in the browser. Nothing to install. If the app has been idle for a while, it takes about 30 seconds to wake up.
+
 Sample output at temperature 0.8:
 
 | Race | Generated names |
