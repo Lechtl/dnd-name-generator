@@ -37,6 +37,13 @@ To retrain the model on `data/raw/names.csv`:
 python train.py
 ```
 
+To run the tests:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -v
+```
+
 ## How it works
 
 The model learns one task: given a race and the letters so far, predict the next letter. To generate a name, it samples a letter, feeds it back in, and repeats until it predicts the end of the name.
@@ -63,6 +70,35 @@ The model has 69,519 trainable parameters.
 - **Splitting by name:** the validation split is made over distinct names, not rows. A name listed under two races stays on one side, so the validation set contains no names the model trained on.
 - **Controlling memorisation:** a small model, dropout and early stopping all make it harder for the model to simply repeat its training names.
 - **Temperature sampling:** low temperatures give safer, more repetitive names, and high temperatures give stranger ones.
+- **Filtering after generation:** each finished name is checked, and a rejected name is simply generated again, up to 100 times. Checking the finished name keeps the filter independent of the model, so it can be tested without TensorFlow.
+
+### Output filter
+
+`slm/name_filter.py` rejects two kinds of names:
+
+- **Three identical letters in a row,** such as "Filllich". No name in the training data has this, so it is always a sampling mistake.
+- **Names of dictators and leading Nazis,** such as Hitler or Stalin, from a fixed list. The check ignores capitalisation.
+
+How often the filter steps in, for 270 names per temperature (30 per race):
+
+| Temperature | Rejected | Examples |
+|---:|---:|---|
+| 0.8 (default) | 0 | |
+| 1.5 | 0 | |
+| 2.0 | 1 | Aaamerce |
+| 3.0 | 4 | Byatzartyusss, Fcollluglddggqh |
+
+At normal temperatures the model has learned to avoid triple letters, so the filter is a safety net for rare cases and high temperatures.
+
+## Tests
+
+The tests in `tests/` cover the tokenizer, loading and splitting the data, sampling and the filter. Among other things, they check that:
+
+- encoding and then decoding a name gives back the same name
+- the target is the input shifted by one position
+- a name listed under two races never ends up in both the training and the validation set
+- PAD and START are never sampled, and a very low temperature always picks the most likely character
+- every banned name only uses characters the model can actually generate
 
 ## Data
 
@@ -103,6 +139,10 @@ The data was split into 1,747 training names and 191 validation names.
 | 39 (best, saved) | 2.21 | 2.35 |
 | 49 (stopped) | 2.13 | 2.37 |
 
+![Training and validation loss per epoch](docs/loss_curve.png)
+
+The training loss keeps falling, while the validation loss levels off after about 20 epochs. From then on the model mainly improves on names it has already seen. Early stopping keeps the model from epoch 39, where the validation loss was lowest. The curve comes from a second training run with the same seed, which reproduced the saved model's numbers exactly.
+
 A validation loss of 2.35 means the model is about as uncertain as choosing between 10 equally likely characters, compared with 31 if it had learned nothing.
 
 Of 100 generated names per race at temperature 0.8, between 0% and 3% were exact copies of names in the dataset.
@@ -111,7 +151,7 @@ Of 100 generated names per race at temperature 0.8, between 0% and 3% were exact
 
 - **The effect of race has not been measured.** Generated names look plausible, but races don't always sound clearly different. Dragonborn in particular doesn't sound clearly draconic.
 - **There is no baseline yet.** The model has not been compared with a simpler approach, such as a character n-gram model.
-- **Some output is garbled,** such as "Pbranda" and "Filllich".
+- **Some output is garbled,** such as "Pbranda". The filter only catches triple letters, not names that are hard to pronounce for other reasons.
 - **The sample is small.** The copy rate comes from a single run of 100 names per race.
 
 ## Next steps
@@ -121,7 +161,6 @@ Of 100 generated names per race at temperature 0.8, between 0% and 3% were exact
 - Test the alternative of feeding the race in at every letter
 - Add gender as a second label
 - Expand the smaller groups, especially half-orc
-- Add unit tests for the tokenizer and the data split
 
 ## Project structure
 
@@ -132,9 +171,14 @@ Of 100 generated names per race at temperature 0.8, between 0% and 3% were exact
 │   ├── config.py          # settings and the list of races
 │   ├── tokenizer.py       # converts characters to IDs and back
 │   ├── dataset.py         # loads, splits and batches the names
-│   └── model.py           # the Keras model
+│   ├── model.py           # the Keras model
+│   └── name_filter.py     # rejects unwanted generated names
+├── tests/                 # pytest tests
+├── docs/loss_curve.png    # loss curve shown in this README
 ├── train.py               # trains the model
-└── generate.py            # generates names
+├── generate.py            # generates names
+├── requirements.txt       # packages to run the project
+└── requirements-dev.txt   # adds pytest for the tests
 ```
 
 ## Disclaimer
