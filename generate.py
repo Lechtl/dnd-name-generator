@@ -1,84 +1,19 @@
-"""Generates names with a trained model. Run with, for example:
+"""Generates names with the trained model. Run with, for example:
 
     python generate.py --race dwarf --count 10 --temperature 0.8
+
+This uses the NumPy copy of the model (checkpoints/weights.npz), so it starts
+quickly and does not need TensorFlow. Create that file with export_weights.py.
 """
 
 import argparse
 
-import keras
 import numpy as np
 
 from slm.config import RACES, Config
-from slm.name_filter import is_acceptable
-from slm.tokenizer import END_ID, PAD_ID, START_ID, CharTokenizer
-
-
-def sample_next_id(logits: np.ndarray, temperature: float, rng: np.random.Generator) -> int:
-    """Picks the next character ID at random, weighted by the model's scores.
-
-    Temperature controls the risk taken. Below 1 favours likely characters, giving
-    safer and more conventional names. Above 1 flattens the odds, giving more
-    unusual names and more nonsense.
-    """
-    # float64 avoids rounding errors that make rng.choice reject the probabilities.
-    logits = logits.astype(np.float64) / temperature
-
-    # These two can never be a sensible next character, so rule them out.
-    logits[[PAD_ID, START_ID]] = -np.inf
-
-    # This is the softmax function. Subtracting the maximum first keeps exp() from
-    # overflowing, and does not change the resulting probabilities.
-    probabilities = np.exp(logits - logits.max())
-    probabilities /= probabilities.sum()
-    return int(rng.choice(len(probabilities), p=probabilities))
-
-
-def generate_name(
-    model: keras.Model,
-    tokenizer: CharTokenizer,
-    race: str,
-    config: Config,
-    temperature: float,
-    rng: np.random.Generator,
-) -> str:
-    """Builds a name one character at a time, feeding each choice back into the model."""
-    race_id = np.array([RACES.index(race)])
-    ids = [START_ID]
-
-    for _ in range(config.max_generated_length):
-        # Re-reads the whole name so far at every step. This repeats some work, but
-        # names are so short that the simpler code is well worth it.
-        logits = model({"chars": np.array([ids]), "race": race_id}, training=False)
-        # Shape is (batch, position, vocabulary): first name, latest position.
-        next_id = sample_next_id(np.array(logits[0, -1]), temperature, rng)
-        if next_id == END_ID:
-            break
-        ids.append(next_id)
-
-    name = tokenizer.decode(ids)
-    # Names were lowercased for training, so restore the leading capital.
-    return name[:1].upper() + name[1:]
-
-
-def generate_acceptable_name(
-    model: keras.Model,
-    tokenizer: CharTokenizer,
-    race: str,
-    config: Config,
-    temperature: float,
-    rng: np.random.Generator,
-    max_attempts: int = 100,
-) -> str:
-    """Generates names until one passes the filter.
-
-    The limit stops an endless loop, for example at a very high temperature where
-    almost every name is nonsense.
-    """
-    for _ in range(max_attempts):
-        name = generate_name(model, tokenizer, race, config, temperature, rng)
-        if is_acceptable(name):
-            return name
-    raise RuntimeError(f"No acceptable name after {max_attempts} attempts.")
+from slm.name_filter import generate_until_acceptable
+from slm.numpy_model import NumpyNameModel
+from slm.tokenizer import CharTokenizer
 
 
 def main() -> None:
@@ -90,17 +25,17 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=config.default_temperature)
     args = parser.parse_args()
 
-    # compile=False skips restoring the optimizer and loss, which only training needs.
-    model = keras.models.load_model(config.model_path, compile=False)
+    model = NumpyNameModel.load(config.weights_path)
     tokenizer = CharTokenizer.load(config.tokenizer_path)
     rng = np.random.default_rng()
 
     for _ in range(args.count):
-        print(
-            generate_acceptable_name(
-                model, tokenizer, args.race, config, args.temperature, rng
+        name = generate_until_acceptable(
+            lambda: model.generate_name(
+                tokenizer, args.race, args.temperature, rng, config.max_generated_length
             )
         )
+        print(name)
 
 
 if __name__ == "__main__":

@@ -1,1 +1,2 @@
-tensorflow>=2.16
+numpy
+streamlit>=1.40

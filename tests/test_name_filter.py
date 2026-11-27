@@ -3,7 +3,7 @@
 import pytest
 
 from slm.config import Config
-from slm.name_filter import BANNED_NAMES, is_acceptable
+from slm.name_filter import BANNED_NAMES, generate_until_acceptable, is_acceptable
 from slm.tokenizer import CharTokenizer
 
 
@@ -40,3 +40,15 @@ def test_banned_names_only_use_characters_the_model_knows():
 
     for name in BANNED_NAMES:
         assert set(name) <= set(tokenizer.chars), name
+
+
+def test_generate_until_acceptable_skips_rejected_names():
+    # A stand-in for the model that returns these names one after another.
+    names = iter(["Hitler", "Filllich", "Thorin"])
+
+    assert generate_until_acceptable(lambda: next(names)) == "Thorin"
+
+
+def test_generate_until_acceptable_gives_up_after_max_attempts():
+    with pytest.raises(RuntimeError):
+        generate_until_acceptable(lambda: "Hitler", max_attempts=5)

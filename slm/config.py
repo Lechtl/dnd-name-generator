@@ -27,6 +27,8 @@ class Config:
     names_path: Path = PROJECT_ROOT / "data" / "raw" / "names.csv"
     model_path: Path = PROJECT_ROOT / "checkpoints" / "best_model.keras"
     tokenizer_path: Path = PROJECT_ROOT / "checkpoints" / "tokenizer.json"
+    # The trained weights as plain NumPy arrays, so names can be generated without TensorFlow.
+    weights_path: Path = PROJECT_ROOT / "checkpoints" / "weights.npz"
 
     # Model size. Kept small on purpose: with only a few thousand names, a larger
     # model would memorise the training names instead of learning their patterns.

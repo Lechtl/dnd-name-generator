@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from generate import sample_next_id
+from slm.sampling import sample_next_id
 from slm.tokenizer import END_ID, PAD_ID, START_ID
 
 

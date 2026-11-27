@@ -6,6 +6,7 @@ appear in a fantasy name generator. Rejected names are simply generated again.
 """
 
 import re
+from collections.abc import Callable
 
 # Real people whose names must never be generated. Written in lowercase, because
 # generate_name capitalises the first letter of every name. The model has no space
@@ -49,3 +50,17 @@ def is_acceptable(name: str) -> bool:
     if lowered in BANNED_NAMES:
         return False
     return not has_too_many_repeated_letters(lowered)
+
+
+def generate_until_acceptable(make_name: Callable[[], str], max_attempts: int = 100) -> str:
+    """Calls make_name until it returns an acceptable name.
+
+    make_name is any function without arguments that returns a new name, so this
+    works with every model. The limit stops an endless loop, for example at a very
+    high temperature where almost every name is nonsense.
+    """
+    for _ in range(max_attempts):
+        name = make_name()
+        if is_acceptable(name):
+            return name
+    raise RuntimeError(f"No acceptable name after {max_attempts} attempts.")
