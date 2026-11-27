@@ -9,6 +9,7 @@ import keras
 import numpy as np
 
 from slm.config import RACES, Config
+from slm.name_filter import is_acceptable
 from slm.tokenizer import END_ID, PAD_ID, START_ID, CharTokenizer
 
 
@@ -59,6 +60,27 @@ def generate_name(
     return name[:1].upper() + name[1:]
 
 
+def generate_acceptable_name(
+    model: keras.Model,
+    tokenizer: CharTokenizer,
+    race: str,
+    config: Config,
+    temperature: float,
+    rng: np.random.Generator,
+    max_attempts: int = 100,
+) -> str:
+    """Generates names until one passes the filter.
+
+    The limit stops an endless loop, for example at a very high temperature where
+    almost every name is nonsense.
+    """
+    for _ in range(max_attempts):
+        name = generate_name(model, tokenizer, race, config, temperature, rng)
+        if is_acceptable(name):
+            return name
+    raise RuntimeError(f"No acceptable name after {max_attempts} attempts.")
+
+
 def main() -> None:
     config = Config()
 
@@ -74,7 +96,11 @@ def main() -> None:
     rng = np.random.default_rng()
 
     for _ in range(args.count):
-        print(generate_name(model, tokenizer, args.race, config, args.temperature, rng))
+        print(
+            generate_acceptable_name(
+                model, tokenizer, args.race, config, args.temperature, rng
+            )
+        )
 
 
 if __name__ == "__main__":
